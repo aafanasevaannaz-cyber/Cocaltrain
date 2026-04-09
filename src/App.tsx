@@ -1,16 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Activity, ChevronLeft, ChevronRight, Music, Settings, Trophy, Volume2 } from 'lucide-react';
 import { demoSong } from './data/demoSong';
 import { getAccuracy, midiToNoteName } from './lib/music';
+import { AudioEngine } from './features/audio/audioEngine';
+import { BrowserPitchDetector } from './features/pitch/pitchDetector';
+import { getSemitoneDiff } from './features/training/trainingSession';
 
 type ViewMode = 'home' | 'phrases' | 'notes';
 
 const flatNotes = demoSong.phrases.flatMap((phrase) => phrase.notes.map((note) => ({ ...note, phraseId: phrase.id })));
 
 export default function App() {
+  const audioEngine = useMemo(() => new AudioEngine(), []);
+  const pitchDetector = useMemo(() => new BrowserPitchDetector(), []);
   const [view, setView] = useState<ViewMode>('home');
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [noteIndex, setNoteIndex] = useState(0);
+  const [isMicOn, setIsMicOn] = useState(false);
+  const [isRefPlaying, setIsRefPlaying] = useState(false);
+  const [liveMidi, setLiveMidi] = useState<number | null>(null);
   const [masterVolume, setMasterVolume] = useState(70);
   const [vocalVolume, setVocalVolume] = useState(50);
   const [instrumentalVolume, setInstrumentalVolume] = useState(60);
@@ -20,7 +28,47 @@ export default function App() {
   const currentPhrase = demoSong.phrases[phraseIndex];
   const currentNote = flatNotes[noteIndex];
   const targetMidi = view === 'phrases' ? currentPhrase?.notes[0]?.midi ?? null : view === 'notes' ? currentNote?.midi ?? null : null;
-  const accuracy = getAccuracy(null);
+  const diff = getSemitoneDiff(targetMidi != null ? targetMidi + transpose : null, liveMidi);
+  const accuracy = getAccuracy(diff);
+
+  useEffect(() => {
+    audioEngine.setSettings({
+      masterVolume,
+      vocalVolume,
+      instrumentalVolume,
+      transpose,
+      tempo,
+    });
+  }, [audioEngine, masterVolume, vocalVolume, instrumentalVolume, transpose, tempo]);
+
+  useEffect(() => {
+    if (!isMicOn) {
+      pitchDetector.stop();
+      setLiveMidi(null);
+      return;
+    }
+
+    let active = true;
+    pitchDetector.start()
+      .then(() => {
+        const tick = () => {
+          if (!active) {
+            return;
+          }
+          setLiveMidi(pitchDetector.getCurrentSample().midi);
+          requestAnimationFrame(tick);
+        };
+        tick();
+      })
+      .catch(() => {
+        setIsMicOn(false);
+      });
+
+    return () => {
+      active = false;
+      pitchDetector.stop();
+    };
+  }, [isMicOn, pitchDetector]);
 
   return (
     <div className="app-shell">
@@ -87,7 +135,7 @@ export default function App() {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div className="small">Поешь</div>
-                  <div style={{ fontSize: 28, fontWeight: 900, color: '#94a3b8' }}>--</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: '#94a3b8' }}>{midiToNoteName(liveMidi)}</div>
                 </div>
               </div>
 
@@ -126,8 +174,23 @@ export default function App() {
               }}>
                 Назад
               </button>
-              <button className="control-btn dark">Слушать</button>
-              <button className="control-btn light">Петь</button>
+              <button
+                className={`control-btn ${isRefPlaying ? 'dark' : 'light'}`}
+                onClick={() => {
+                  const nextState = !isRefPlaying;
+                  setIsRefPlaying(nextState);
+                  if (nextState) {
+                    audioEngine.play();
+                  } else {
+                    audioEngine.pause();
+                  }
+                }}
+              >
+                {isRefPlaying ? 'Стоп' : 'Слушать'}
+              </button>
+              <button className={`control-btn ${isMicOn ? 'dark' : 'light'}`} onClick={() => setIsMicOn((prev) => !prev)}>
+                {isMicOn ? 'Микрофон: вкл' : 'Петь'}
+              </button>
               <button className="control-btn light" onClick={() => {
                 if (view === 'phrases') setPhraseIndex((prev) => Math.min(demoSong.phrases.length - 1, prev + 1));
                 if (view === 'notes') setNoteIndex((prev) => Math.min(flatNotes.length - 1, prev + 1));
