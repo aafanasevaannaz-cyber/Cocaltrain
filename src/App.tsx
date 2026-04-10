@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, ChevronLeft, ChevronRight, Music, Settings, Trophy, Volume2 } from 'lucide-react';
 import { demoSong } from './data/demoSong';
 import { getAccuracy, midiToNoteName } from './lib/music';
-import { AudioEngine } from './features/audio/audioEngine';
+import { AudioEngine, type ToneProfile } from './features/audio/audioEngine';
 import { BrowserPitchDetector } from './features/pitch/pitchDetector';
 import { getAccuracyPercent, getIntonationVerdict, getSemitoneDiff, type TrainingProgress } from './features/training/trainingSession';
 
@@ -24,6 +24,9 @@ export default function App() {
   const [fullIndex, setFullIndex] = useState(0);
   const [phraseProgress, setPhraseProgress] = useState<PhraseProgressMap>({});
   const [bestScore, setBestScore] = useState(0);
+  const [toneProfile, setToneProfile] = useState<ToneProfile>('wave');
+  const [micError, setMicError] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const [masterVolume, setMasterVolume] = useState(70);
   const [vocalVolume, setVocalVolume] = useState(50);
   const [instrumentalVolume, setInstrumentalVolume] = useState(60);
@@ -70,13 +73,15 @@ export default function App() {
       instrumentalVolume,
       transpose,
       tempo,
+      toneProfile,
     });
-  }, [audioEngine, masterVolume, vocalVolume, instrumentalVolume, transpose, tempo]);
+  }, [audioEngine, masterVolume, vocalVolume, instrumentalVolume, transpose, tempo, toneProfile]);
 
   useEffect(() => {
     if (!isMicOn) {
       pitchDetector.stop();
       setLiveMidi(null);
+      setMicError(null);
       return;
     }
 
@@ -93,6 +98,7 @@ export default function App() {
         tick();
       })
       .catch(() => {
+        setMicError('Нет доступа к микрофону. Разреши доступ в браузере и попробуй снова.');
         setIsMicOn(false);
       });
 
@@ -136,24 +142,30 @@ export default function App() {
         ? [currentNote]
         : flatNotes;
 
-    setIsRefPlaying(true);
-    audioEngine.playSequence(
-      notes.map((item) => ({ midi: item.midi, duration: item.duration })),
-      {
-        onNoteStart: (index) => {
-          if (view === 'phrases') {
-            return;
-          }
-          if (view === 'notes') {
-            setNoteIndex(Math.min(flatNotes.length - 1, noteIndex + index));
-          }
-          if (view === 'full') {
-            setFullIndex(Math.min(flatNotes.length - 1, index));
-          }
+    try {
+      setAudioError(null);
+      setIsRefPlaying(true);
+      audioEngine.playSequence(
+        notes.map((item) => ({ midi: item.midi, duration: item.duration })),
+        {
+          onNoteStart: (index) => {
+            if (view === 'phrases') {
+              return;
+            }
+            if (view === 'notes') {
+              setNoteIndex(Math.min(flatNotes.length - 1, noteIndex + index));
+            }
+            if (view === 'full') {
+              setFullIndex(Math.min(flatNotes.length - 1, index));
+            }
+          },
+          onEnd: () => setIsRefPlaying(false),
         },
-        onEnd: () => setIsRefPlaying(false),
-      },
-    );
+      );
+    } catch {
+      setAudioError('Не удалось запустить звук. Кликни по экрану и попробуй снова.');
+      setIsRefPlaying(false);
+    }
   };
 
   return (
@@ -212,6 +224,12 @@ export default function App() {
 
         {view !== 'home' && (
           <>
+            {(micError || audioError) && (
+              <section className="card panel stack">
+                {micError && <div style={{ color: '#b91c1c', fontWeight: 700 }}>{micError}</div>}
+                {audioError && <div style={{ color: '#b91c1c', fontWeight: 700 }}>{audioError}</div>}
+              </section>
+            )}
             <section className="card panel stack">
               <div className="row">
                 <div>
@@ -251,6 +269,13 @@ export default function App() {
             </section>
 
             <section className="card panel transport">
+              <label>Звук эталона: {toneProfile === 'wave' ? 'Волны' : toneProfile === 'piano' ? 'Пианино' : 'Голос'}</label>
+              <div className="controls">
+                <button className={`control-btn ${toneProfile === 'wave' ? 'dark' : 'light'}`} onClick={() => setToneProfile('wave')}>Волны</button>
+                <button className={`control-btn ${toneProfile === 'piano' ? 'dark' : 'light'}`} onClick={() => setToneProfile('piano')}>Пианино</button>
+                <button className={`control-btn ${toneProfile === 'voice' ? 'dark' : 'light'}`} onClick={() => setToneProfile('voice')}>Голос</button>
+              </div>
+
               <label>Общая громкость: {masterVolume}%</label>
               <input type="range" min="0" max="100" value={masterVolume} onChange={(e) => setMasterVolume(Number(e.target.value))} />
 

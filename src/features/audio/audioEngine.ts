@@ -9,7 +9,10 @@ export interface AudioMix {
 export interface AudioSettings extends AudioMix {
   tempo: number;
   transpose: number;
+  toneProfile: ToneProfile;
 }
+
+export type ToneProfile = 'wave' | 'piano' | 'voice';
 
 export interface ReferenceNote {
   midi: number;
@@ -32,6 +35,7 @@ export class AudioEngine {
     instrumentalVolume: 60,
     tempo: 100,
     transpose: 0,
+    toneProfile: 'wave',
   };
 
   get playbackState(): PlaybackState {
@@ -64,21 +68,72 @@ export class AudioEngine {
     }
 
     const frequency = 440 * Math.pow(2, (midi - 69) / 12);
+    const tone = this.settings.toneProfile;
+    if (tone === 'piano') {
+      this.playPianoTone(startAt, frequency, durationSeconds);
+      return;
+    }
+    if (tone === 'voice') {
+      this.playVoiceTone(startAt, frequency, durationSeconds);
+      return;
+    }
+    this.playWaveTone(startAt, frequency, durationSeconds);
+  }
+
+  private playWaveTone(startAt: number, frequency: number, durationSeconds: number) {
+    if (!this.audioContext || !this.gainNode) return;
     const osc = this.audioContext.createOscillator();
     const noteGain = this.audioContext.createGain();
-
     noteGain.gain.setValueAtTime(0.0001, startAt);
     noteGain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.015);
     noteGain.gain.setValueAtTime(0.12, startAt + Math.max(0.02, durationSeconds - 0.035));
     noteGain.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSeconds);
-
     osc.type = 'sine';
     osc.frequency.setValueAtTime(frequency, startAt);
     osc.connect(noteGain);
     noteGain.connect(this.gainNode);
-
     osc.start(startAt);
     osc.stop(startAt + durationSeconds + 0.01);
+  }
+
+  private playPianoTone(startAt: number, frequency: number, durationSeconds: number) {
+    if (!this.audioContext || !this.gainNode) return;
+    const partials = [1, 2, 3];
+    partials.forEach((multiplier, idx) => {
+      const osc = this.audioContext!.createOscillator();
+      const noteGain = this.audioContext!.createGain();
+      const level = idx === 0 ? 0.16 : idx === 1 ? 0.06 : 0.03;
+      noteGain.gain.setValueAtTime(0.0001, startAt);
+      noteGain.gain.exponentialRampToValueAtTime(level, startAt + 0.01);
+      noteGain.gain.exponentialRampToValueAtTime(0.0001, startAt + Math.max(0.12, durationSeconds));
+      osc.type = idx % 2 === 0 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(frequency * multiplier, startAt);
+      osc.connect(noteGain);
+      noteGain.connect(this.gainNode!);
+      osc.start(startAt);
+      osc.stop(startAt + durationSeconds + 0.03);
+    });
+  }
+
+  private playVoiceTone(startAt: number, frequency: number, durationSeconds: number) {
+    if (!this.audioContext || !this.gainNode) return;
+    const osc = this.audioContext.createOscillator();
+    const filter = this.audioContext.createBiquadFilter();
+    const noteGain = this.audioContext.createGain();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1100, startAt);
+    filter.Q.setValueAtTime(0.9, startAt);
+    noteGain.gain.setValueAtTime(0.0001, startAt);
+    noteGain.gain.exponentialRampToValueAtTime(0.1, startAt + 0.02);
+    noteGain.gain.setValueAtTime(0.1, startAt + Math.max(0.02, durationSeconds - 0.03));
+    noteGain.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSeconds);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(frequency, startAt);
+    osc.connect(filter);
+    filter.connect(noteGain);
+    noteGain.connect(this.gainNode);
+    osc.start(startAt);
+    osc.stop(startAt + durationSeconds + 0.02);
   }
 
   playSequence(notes: ReferenceNote[], options: PlaySequenceOptions = {}) {
@@ -91,6 +146,9 @@ export class AudioEngine {
     this.ensureAudio();
     if (!this.audioContext) {
       return;
+    }
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
     }
 
     this.state = 'playing';
