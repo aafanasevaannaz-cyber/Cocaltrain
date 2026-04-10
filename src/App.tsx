@@ -42,6 +42,14 @@ export default function App() {
   const targetMidi = view === 'phrases' ? currentPhrase?.notes[0]?.midi ?? null : activeNote?.midi ?? null;
   const diff = getSemitoneDiff(targetMidi != null ? targetMidi + transpose : null, liveMidi);
   const accuracy = getAccuracy(diff);
+  const meterLeft = (() => {
+    if (diff == null || Number.isNaN(diff)) {
+      return 50;
+    }
+    const clamped = Math.max(-0.8, Math.min(0.8, diff));
+    return 50 + (clamped / 0.8) * 40;
+  })();
+  const singingState = liveMidi == null ? 'Не слышу голос' : `Слышу: ${midiToNoteName(liveMidi)}`;
   const totalAccuracy = getAccuracyPercent({
     attempts: Object.values(phraseProgress).reduce((sum, item) => sum + item.attempts, 0),
     correct: Object.values(phraseProgress).reduce((sum, item) => sum + item.correct, 0),
@@ -188,6 +196,15 @@ export default function App() {
     }
   };
 
+  const singTogether = () => {
+    if (!isMicOn) {
+      setIsMicOn(true);
+    }
+    if (!isRefPlaying) {
+      playReference();
+    }
+  };
+
   return (
     <div className="app-shell">
       <div className="phone">
@@ -277,12 +294,16 @@ export default function App() {
 
               <div className="meter">
                 <div className="meter-center" />
-                <div className="meter-dot" style={{ left: '50%', background: accuracy.dot }} />
+                <div className="meter-dot" style={{ left: `${meterLeft}%`, background: accuracy.dot }} />
               </div>
 
               <div className="row">
                 <div className="small">Статус</div>
                 <div style={{ padding: '8px 12px', borderRadius: 999, background: accuracy.bg, color: accuracy.color, fontWeight: 800, fontSize: 12 }}>{accuracy.label}</div>
+              </div>
+              <div className="row">
+                <div className="small">Детектор</div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{singingState}</div>
               </div>
 
               <div className="row">
@@ -331,6 +352,9 @@ export default function App() {
               </button>
               <button className={`control-btn ${isMicOn ? 'dark' : 'light'}`} onClick={() => setIsMicOn((prev) => !prev)}>
                 {isMicOn ? 'Микрофон: вкл' : 'Петь'}
+              </button>
+              <button className="control-btn dark" onClick={singTogether}>
+                Петь вместе
               </button>
               <button className="control-btn light" onClick={() => {
                 markAttempt();
