@@ -9,6 +9,7 @@ import { getAccuracyPercent, getIntonationVerdict, getSemitoneDiff, type Trainin
 type ViewMode = 'home' | 'phrases' | 'notes' | 'full';
 type PhraseProgressMap = Record<number, TrainingProgress>;
 const PROGRESS_KEY = 'cocaltrain_progress_v1';
+type MicState = 'idle' | 'connecting' | 'connected' | 'error';
 
 const flatNotes = demoSong.phrases.flatMap((phrase) => phrase.notes.map((note) => ({ ...note, phraseId: phrase.id })));
 
@@ -27,6 +28,7 @@ export default function App() {
   const [toneProfile, setToneProfile] = useState<ToneProfile>('wave');
   const [micError, setMicError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [micState, setMicState] = useState<MicState>('idle');
   const [masterVolume, setMasterVolume] = useState(70);
   const [vocalVolume, setVocalVolume] = useState(50);
   const [instrumentalVolume, setInstrumentalVolume] = useState(60);
@@ -82,12 +84,15 @@ export default function App() {
       pitchDetector.stop();
       setLiveMidi(null);
       setMicError(null);
+      setMicState('idle');
       return;
     }
 
     let active = true;
+    setMicState('connecting');
     pitchDetector.start()
       .then(() => {
+        setMicState('connected');
         const tick = () => {
           if (!active) {
             return;
@@ -97,26 +102,41 @@ export default function App() {
         };
         tick();
       })
-      .catch(() => {
-        setMicError('Нет доступа к микрофону. Разреши доступ в браузере и попробуй снова.');
+      .catch((error: unknown) => {
+        let message = 'Не удалось подключить микрофон.';
+        if (error instanceof DOMException && error.name === 'NotAllowedError') {
+          message = 'Доступ к микрофону запрещен. Разреши доступ в браузере.';
+        } else if (error instanceof DOMException && error.name === 'NotFoundError') {
+          message = 'Микрофон не найден. Подключи устройство и попробуй снова.';
+        } else if (error instanceof DOMException && error.name === 'NotReadableError') {
+          message = 'Микрофон занят другим приложением. Освободи его и попробуй снова.';
+        }
+        setMicState('error');
+        setMicError(message);
         setIsMicOn(false);
       });
 
     return () => {
       active = false;
       pitchDetector.stop();
+      setMicState('idle');
     };
   }, [isMicOn, pitchDetector]);
 
   useEffect(() => {
-    const raw = localStorage.getItem(PROGRESS_KEY);
-    if (!raw) {
+    const raw = window.localStorage.getItem(PROGRESS_KEY);
+    if (!raw?.trim()) {
       return;
     }
 
-    const parsed = JSON.parse(raw) as { phraseProgress: PhraseProgressMap; bestScore: number };
-    setPhraseProgress(parsed.phraseProgress ?? {});
-    setBestScore(parsed.bestScore ?? 0);
+    try {
+      const parsed = JSON.parse(raw) as { phraseProgress: PhraseProgressMap; bestScore: number };
+      setPhraseProgress(parsed.phraseProgress ?? {});
+      setBestScore(parsed.bestScore ?? 0);
+    } catch {
+      setAudioError('Данные прогресса повреждены. История будет создана заново.');
+      window.localStorage.removeItem(PROGRESS_KEY);
+    }
   }, []);
 
   useEffect(() => {
@@ -126,7 +146,7 @@ export default function App() {
       return;
     }
 
-    localStorage.setItem(PROGRESS_KEY, JSON.stringify({ phraseProgress, bestScore }));
+    window.localStorage.setItem(PROGRESS_KEY, JSON.stringify({ phraseProgress, bestScore }));
   }, [phraseProgress, bestScore, totalAccuracy]);
 
   const playReference = () => {
@@ -236,6 +256,9 @@ export default function App() {
                   <div className="small">Режим</div>
                   <div style={{ fontSize: 22, fontWeight: 900 }}>{view === 'phrases' ? currentPhrase.text : activeNote?.text ?? '--'}</div>
                 </div>
+                <div className={`mic-pill mic-pill--${micState}`}>
+                  {micState === 'connected' ? 'Микрофон подключен' : micState === 'connecting' ? 'Подключение микрофона...' : micState === 'error' ? 'Ошибка микрофона' : 'Микрофон отключен'}
+                </div>
                 <button className="icon-btn">
                   <Volume2 size={20} />
                 </button>
@@ -270,7 +293,7 @@ export default function App() {
 
             <section className="card panel transport">
               <label>Звук эталона: {toneProfile === 'wave' ? 'Волны' : toneProfile === 'piano' ? 'Пианино' : 'Голос'}</label>
-              <div className="controls">
+              <div className="tone-selector">
                 <button className={`control-btn ${toneProfile === 'wave' ? 'dark' : 'light'}`} onClick={() => setToneProfile('wave')}>Волны</button>
                 <button className={`control-btn ${toneProfile === 'piano' ? 'dark' : 'light'}`} onClick={() => setToneProfile('piano')}>Пианино</button>
                 <button className={`control-btn ${toneProfile === 'voice' ? 'dark' : 'light'}`} onClick={() => setToneProfile('voice')}>Голос</button>
