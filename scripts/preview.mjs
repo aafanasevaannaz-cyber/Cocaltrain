@@ -10,6 +10,8 @@ const mime = {
   '.json': 'application/json; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
+  '.ts': 'application/javascript; charset=utf-8',
+  '.tsx': 'application/javascript; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
 };
 
@@ -26,6 +28,7 @@ const server = createServer((req, res) => {
   const ext = extname(filename);
   const data = readFileSync(filename);
   res.setHeader('content-type', mime[ext] ?? 'application/octet-stream');
+  res.setHeader('cache-control', 'no-store');
   res.end(data);
 });
 
