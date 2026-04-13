@@ -1,0 +1,70 @@
+{
+  "id": "svet-v-okne",
+  "title": "Свет в окне",
+  "artist": "Demo",
+  "tempo": 88,
+  "defaultKey": "G",
+  "range": {
+    "minMidi": 62,
+    "maxMidi": 67
+  },
+  "tracks": {
+    "fullmix": "",
+    "vocal": "",
+    "instrumental": ""
+  },
+  "phrases": [
+    {
+      "id": 0,
+      "text": "Свет в окне",
+      "start": 0,
+      "end": 3.0,
+      "notes": [
+        {
+          "start": 0.0,
+          "duration": 0.7,
+          "midi": 62,
+          "text": "Свет"
+        },
+        {
+          "start": 0.8,
+          "duration": 0.5,
+          "midi": 64,
+          "text": "в"
+        },
+        {
+          "start": 1.4,
+          "duration": 1.1,
+          "midi": 67,
+          "text": "окне"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "text": "Держит тишину",
+      "start": 3.2,
+      "end": 6.2,
+      "notes": [
+        {
+          "start": 0.0,
+          "duration": 0.7,
+          "midi": 66,
+          "text": "Держит"
+        },
+        {
+          "start": 0.9,
+          "duration": 0.7,
+          "midi": 64,
+          "text": "ти"
+        },
+        {
+          "start": 1.7,
+          "duration": 1.0,
+          "midi": 62,
+          "text": "шину"
+        }
+      ]
+    }
+  ]
+}
