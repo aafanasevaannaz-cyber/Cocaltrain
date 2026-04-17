@@ -6,7 +6,7 @@ export function autoCorrelate(buffer: Float32Array, sampleRate: number): number 
   }
 
   rms = Math.sqrt(rms / buffer.length);
-  if (rms < 0.01) return null;
+  if (rms < 0.006) return null;
 
   let r1 = 0;
   let r2 = buffer.length - 1;

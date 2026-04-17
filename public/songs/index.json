@@ -1,0 +1,26 @@
+[
+  {
+    "id": "net-bez-trevog",
+    "title": "Нет без тревог ни сна, ни дня",
+    "artist": "Demo",
+    "tempo": 92,
+    "defaultKey": "C",
+    "range": {
+      "minMidi": 59,
+      "maxMidi": 64
+    },
+    "file": "songs/net-bez-trevog.json"
+  },
+  {
+    "id": "svet-v-okne",
+    "title": "Свет в окне",
+    "artist": "Demo",
+    "tempo": 88,
+    "defaultKey": "G",
+    "range": {
+      "minMidi": 62,
+      "maxMidi": 67
+    },
+    "file": "songs/svet-v-okne.json"
+  }
+]
